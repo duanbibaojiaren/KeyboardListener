@@ -37,7 +37,7 @@ public struct UIViewKeyboardListenerWrapper {
 }
 private class UIViewKeyboardListener {
     var keyboardSpacing: CGFloat = 0.0
-    var transformView: UIView!
+    private weak var transformView: UIView?
     var isCurrentTextInput: Bool = false
     var currentUserInfo: [AnyHashable : Any]?
 
@@ -65,7 +65,11 @@ private class UIViewKeyboardListener {
     }
     
     func makeKeyboardWillShow() {
-        guard let currentWindow = self.transformView.window, currentWindow.isKeyWindow == true else {
+        guard let transformView else {
+            return
+        }
+        
+        guard let currentWindow = transformView.window, currentWindow.isKeyWindow == true else {
             return
         }
 
@@ -92,8 +96,9 @@ private class UIViewKeyboardListener {
         let curve = UIView.AnimationOptions(rawValue: curveRaw << 16)
 
         if (telMaxY > keyboardY) {
-            UIView.animate(withDuration: duration, delay: 0, options: [curve, .beginFromCurrentState]) {
-                self.transformView.transform = CGAffineTransform(translationX: 0, y: keyboardY - telMaxY - self.keyboardSpacing)
+            let translationY = keyboardY - telMaxY - keyboardSpacing
+            UIView.animate(withDuration: duration, delay: 0, options: [curve, .beginFromCurrentState]) { [weak transformView] in
+                 transformView?.transform = CGAffineTransform(translationX: 0, y: translationY)
             }
         }
     }
@@ -104,7 +109,11 @@ private class UIViewKeyboardListener {
     }
     
     @objc func keyboardWillHide(_ notification: Foundation.Notification) {
-        if (self.transformView.transform == CGAffineTransform.identity) {
+        guard let transformView else {
+            return
+        }
+        
+        if (transformView.transform == CGAffineTransform.identity) {
             return
         }
         var duration = 0.0
@@ -118,32 +127,39 @@ private class UIViewKeyboardListener {
         let curveRaw = (notification.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt) ?? UIView.AnimationOptions.curveEaseInOut.rawValue
         let curve = UIView.AnimationOptions(rawValue: curveRaw << 16)
 
-        UIView.animate(withDuration: duration, delay: 0, options: [curve, .beginFromCurrentState]) {
-            self.transformView.transform = CGAffineTransform.identity
+        UIView.animate(withDuration: duration, delay: 0, options: [curve, .beginFromCurrentState]) { [weak transformView] in
+            transformView?.transform = CGAffineTransform.identity
         }
 
     }
     
     @objc func textInputDidBeginEditing(_ notification: Foundation.Notification) {
+        guard let transformView else {
+            return
+        }
         guard let view = notification.object as? UIView, view.window?.isKeyWindow == true else {
             return
         }
         
-        if view == self.transformView {
+        if view == transformView {
             self.isCurrentTextInput = true
         } else {
-            self.isCurrentTextInput = view.isDescendant(of: self.transformView)
+            self.isCurrentTextInput = view.isDescendant(of: transformView)
         }
 
         makeKeyboardWillShow()
     }
 
     @objc func textInputDidEndEditing(_ notification: Foundation.Notification) {
+        guard let transformView else {
+            return
+        }
+        
         guard let view = notification.object as? UIView, view.window?.isKeyWindow == true else {
             return
         }
 
-        if view == self.transformView || view.isDescendant(of: self.transformView) {
+        if view == transformView || view.isDescendant(of: transformView) {
             self.isCurrentTextInput = false
         }
 
